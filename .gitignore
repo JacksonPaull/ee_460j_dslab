@@ -1,3 +1,4 @@
 .idea/*
 *.csv
 02_lab/Lab2_Data/*
+03_lab/scraped/*.pdf
