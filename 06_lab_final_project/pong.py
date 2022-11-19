@@ -15,6 +15,7 @@ class GameObject:
 
 class Ball(GameObject):
     r = 10
+    v = 0.5
 
     def __init__(self, x, y, engine):
         self.x = x
@@ -25,28 +26,36 @@ class Ball(GameObject):
         dy = (random.random() - 0.5) * 2 
         mag = math.sqrt(dx ** 2 + dy ** 2)
 
-        self.speed = (dx/mag, dy/mag)
+        self.speed = (dx/mag * self.v, dy/mag * self.v)
 
     def update(self, dt):
         # Move
         self.y += self.speed[1] * dt
         self.x += self.speed[0] * dt
 
-        dy = 1
-        dx = 1
+        angle = math.atan(self.speed[1]/ self.speed[0])
+        if self.speed[0] < 0:
+            angle += math.pi
+
 
         # Adjust position for collisions with ceiling and floor
         if self.y < 0:
             self.y *= -1 # Flip distance to top borders
-            dy = -1
+            angle *= -1
         if self.y > self.engine.scr_height:
             self.y -= 2*(self.y - self.engine.scr_height)
-            dy = -1
+            angle *= -1
 
         # Check for collisions with paddles
         for i, p in enumerate([self.engine.objects['paddle1'], self.engine.objects['paddle2']]):
             if self.x >= p.x and self.x <= p.x + p.width and self.y >= p.y and self.y <= p.y + p.height:
                 # Ball collided with paddle
+                self.v = math.log(math.exp(self.v)+0.1) #Add a logarithmic speed boost to the ball
+                ydelt = self.y - (p.y + p.height/2)
+                angle = ydelt/p.height * math.pi / 2 #Value ranging from -pi/4 to pi/4 depending upon where the ball hit the paddle
+                if self.speed[0] > 0:
+                    angle = math.pi - angle
+
                 if i == 0:
                     self.engine.objects['scoreboard'].p1Score += 1
                     self.x = p.x + p.width + self.r
@@ -54,23 +63,14 @@ class Ball(GameObject):
                     self.engine.objects['scoreboard'].p2Score += 1
                     self.x = p.x - self.r
                 
-                dx = -1
 
         # Check for round over (Paddle missed a ball)
-        if self.x < 0:
-            self.engine.round_over = True
-            self.x *= -1 # Flip distance to top border
-            dx = -1
-        if self.x > self.engine.scr_width:
-            self.engine.round_over = True
-            self.x -= 2*(self.x - self.engine.scr_width)
-            dx = -1
+        if self.x < 0 or self.x > self.engine.scr_width:
+            self.engine.reset()
 
         # Update Speed
-        if dx != 1 or dy != 1:
-            newxv = self.speed[0] * dx #* self.speed #* 1.0125, # (optional) Increase speed
-            newyv = self.speed[1] * dy #* self.speed
-            self.speed = (newxv, newyv)
+        mag = self.v # Can update this to be an instance variable to allow for speed up throughout the game
+        self.speed = (mag * math.cos(angle), mag * math.sin(angle))
 
     def draw(self, surf):
         pygame.draw.circle(surf, c_white, (self.x, self.y), self.r)
@@ -159,7 +159,7 @@ class Pong_Game_Engine:
     pygame.font.init()
     _framerate = 60
     clock = pygame.time.Clock()
-    scr_width, scr_height = 1600, 960
+    scr_width, scr_height = 1280, 720
     fnt_debug = pygame.font.SysFont('Arial', 32)
 
     def __init__(self, screensize=None):
