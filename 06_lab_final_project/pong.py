@@ -5,18 +5,26 @@ import math
 import neat
 import pickle
 
+pygame.init()
+pygame.font.init()
+
 # Defining Global Constants
 c_white = (255, 255, 255)
 c_black = (0  ,   0,   0)
 c_red   = (255,   0,   0)
 
-class GameObject:
-    def update(self, dt):
-        pass
-    def draw(self, surf):
-        pass
+# Global Window vars
+WIN_WIDTH  = 1280
+WIN_HEIGHT = 720
+WIN = pygame.display.set_mode((WIN_WIDTH,WIN_HEIGHT))
+pygame.display.set_caption('Pong with NEAT')
 
-class Ball(GameObject):
+# Global fonts
+FNT_DEBUG = pygame.font.SysFont('Arial', 32)
+
+gen = 0
+
+class Ball():
     r = 10
     start_vel = 0.5
 
@@ -48,6 +56,7 @@ class Ball(GameObject):
 
     def update(self, dt):
         # Move
+        outcome = 0
         self.y += self.vel[1] * dt
         self.x += self.vel[0] * dt
 
@@ -64,33 +73,35 @@ class Ball(GameObject):
         if self.y < 0:
             self.y *= -1 # Flip distance to top borders
             angle *= -1
-        if self.y > self.paddle.engine.scr_height:
-            self.y -= 2*(self.y - self.paddle.engine.scr_height)
+        if self.y > WIN_HEIGHT:
+            self.y -= 2*(self.y - WIN_HEIGHT)
             angle *= -1
 
         # Check for collisions with paddles
         
         if self.x >= self.paddle.x and self.x <= self.paddle.x + self.paddle.width and self.y >= self.paddle.y and self.y <= self.paddle.y + self.paddle.height:
             # Ball collided with paddle
+            outcome = 1
             self.v = math.log(math.exp(v)+1) #Add a logarithmic speed boost to the ball
             ydelt = self.y - (self.paddle.y + self.paddle.height/2)
             angle = ydelt/self.paddle.height * math.pi / 2 #Value ranging from -pi/4 to pi/4 depending upon where the ball hit the paddle
             if self.vel[0] > 0:
                 angle = math.pi - angle
 
-
-        # Check for round over (Paddle missed a ball)
+        # Bounce the ball off the left wall
+        # TODO Add in random angle shift here
         if self.x < 0:
             self.x *= -1
             angle  = math.pi - angle # flip the direction the ball is traveling over the y axis
+            angle = random.uniform(math.pi/-4 , math.pi/4)
 
         
-        elif self.x > self.paddle.engine.scr_width:
+        elif self.x > WIN_WIDTH:
             # Paddle missed the ball #TODO return false
-            return False
+            outcome = -1
 
         self.vel = (v * math.cos(angle), v * math.sin(angle))
-        return True
+        return outcome
 
     def draw(self, surf):
         pygame.draw.circle(surf, self.col, (self.x, self.y), self.r)
@@ -98,27 +109,26 @@ class Ball(GameObject):
 
 
 
-class Paddle(GameObject):
+class Paddle():
     width = 25
     height = 135 # Center at y + 67
     speed = 0.5
-    player_controlled=True
+    player_controlled=False
     keybinds = {
         'up':pygame.K_w,
         'down':pygame.K_s
     }
-    col = (random.randrange(125, 200), random.randrange(125, 200), random.randrange(125, 200))
+    
 
-    def __init__(self, x, y, engine, keybinds=None):
+    def __init__(self, x, y, keybinds=None):
         self.x = x
         self.y = y
         self.start_x = x
         self.start_y = y
-        self.engine = engine
         if keybinds is not None:
             self.keybinds = keybinds
-
-        self.ball = Ball(self.engine.scr_width/2, self.engine.scr_height/2, self, self.col)
+        self.col = (random.randrange(125, 200), random.randrange(125, 200), random.randrange(125, 200))
+        self.ball = Ball(WIN_WIDTH/2, WIN_HEIGHT/2, self, self.col)
 
     def reset(self):
         self.x = self.start_x
@@ -133,154 +143,97 @@ class Paddle(GameObject):
             if pygame.key.get_pressed()[self.keybinds['down']]:
                 self.move_down(dt)
 
-        if not self.ball.update(dt):
-            # missed ball
-            self.engine.reset()
+        return self.ball.update(dt)   
         
     def move_up(self, dt):
         self.y -= min(self.speed*dt, self.y)
 
     def move_down(self, dt):
         self.y += self.speed*dt
-        if self.y + self.height > self.engine.scr_height:
-            self.y = self.engine.scr_height - self.height
+        if self.y + self.height > WIN_HEIGHT:
+            self.y = WIN_HEIGHT - self.height
 
     def draw(self, surf):
         surf.fill(self.col, (self.x, self.y, self.width, self.height))
         self.ball.draw(surf)
 
 
-class Scoreboard(GameObject):
-    #TODO Refactor this if we want it to display like the maximum current score?
-    dashed_line_height = 25
-
-    def __init__(self, font, engine):
-        # Create scoreboard object
-        self.p1Score = 0
-        self.p2Score = 0
-        
-        self.font = font
-        self.engine = engine
-        self.num_lines = math.ceil(self.engine.scr_height / self.dashed_line_height / 2)
-
-
-    def draw(self, surf):
-        # Draw the current scores of the players in the proper position onto surf
-        t = self.font.render(f'Player 1 Score: {self.p1Score}', False, c_white)
-        t_rect = t.get_rect()
-        t_rect.center = (self.engine.scr_width/4, 50)
-        surf.blit(t, t_rect)
-
-        t = self.font.render(f'{self.p2Score}: Player 2 Score', False, c_white)
-        t_rect = t.get_rect()
-        t_rect.center = (3 * self.engine.scr_width/4, 50)
-        surf.blit(t, t_rect)
-
-        for i in range(self.num_lines):
-            start_pos = (self.engine.scr_width / 2, self.dashed_line_height * 2 * i)
-            end_pos =   (self.engine.scr_width / 2, self.dashed_line_height * 2 * i + self.dashed_line_height)
-            pygame.draw.line(surf, c_white, start_pos, end_pos, 3)
-
-
-
-class Pong_Game_Engine:
-    pygame.init()
-    pygame.font.init()
-    _framerate = 60
-    clock = pygame.time.Clock()
-    scr_width, scr_height = 1280, 720
-    fnt_debug = pygame.font.SysFont('Arial', 32)
-
-    dashed_line_height = 25
-    num_lines = math.ceil(scr_height / dashed_line_height / 2)
-
-    def __init__(self, screensize=None):
-        self.objects = {}
-        self.should_quit = False
-        self.paused = True
-
-        if screensize is not None:
-            self.scr_width, self.scr_height = screensize
-
-        self.screen = pygame.display.set_mode((self.scr_width, self.scr_height))
-
-        #p = Paddle(30, self.scr_height/2, self)
-        #p.y -= math.floor(p.height/2)
-        #self.objects['paddle1'] = p
-
-        p = Paddle(self.scr_width - 30, self.scr_height/2, self, keybinds={'up':pygame.K_o, 'down':pygame.K_l})
-        p.x -= p.width
-        p.y -= math.floor(p.height/2)
-        self.objects['paddle2'] = p
-
-        # Draw initial screen
-        self.screen.fill(c_black)
-        for o in self.objects.values():
-            o.draw(self.screen)
-
-        for i in range(self.num_lines):
-            start_pos = (self.scr_width / 2, self.dashed_line_height * 2 * i)
-            end_pos =   (self.scr_width / 2, self.dashed_line_height * 2 * i + self.dashed_line_height)
-            pygame.draw.line(self.screen, c_white, start_pos, end_pos, 3)
-
-        pygame.display.flip()
-
-    def update(self):
-        dt = self.clock.tick(self._framerate)
-        for e in pygame.event.get():
-            if e.type == pygame.QUIT or (e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE):
-                self.should_quit = True
-                return
-            if e.type == pygame.KEYDOWN and e.key == pygame.K_SPACE:
-                self.paused ^= 1
-            if e.type == pygame.KEYDOWN and e.key == pygame.K_r:
-                self.reset()
-
-        if self.paused:
-            return
-
-        self.screen.fill(c_black)
-
-        for o in self.objects.values():
-            o.update(dt)
-
-        for o in self.objects.values():
-            o.draw(self.screen)
-        
-        for i in range(self.num_lines):
-            start_pos = (self.scr_width / 2, self.dashed_line_height * 2 * i)
-            end_pos =   (self.scr_width / 2, self.dashed_line_height * 2 * i + self.dashed_line_height)
-            pygame.draw.line(self.screen, c_white, start_pos, end_pos, 3)
-
-        pygame.display.flip()
-
-    def reset(self):
-        self.paused = True
-        self.screen.fill(c_black)
-        for o in self.objects.values():
-            o.reset()
-            o.draw(self.screen)
-        pygame.display.flip()
-
-
 def eval_genomes(genomes, config):
     paddles = []
     nets = []
-    genomes = []
+    ge = []
     
     for genome_id, genome in genomes:
-        genome.fitness = 4.0
+        genome.fitness = 0
         net = neat.nn.FeedForwardNetwork.create(genome, config)
+        ge.append(genome)
+        nets.append(net)
+        paddles.append(Paddle(WIN_WIDTH-30, WIN_HEIGHT/2))
+
 
     # Create engine
+    clock = pygame.time.Clock()
         
-    # while loop
-        # update all paddles
-            # If a paddle fails to reflect a ball, 
-        # update engine
+    # Run the game until manual exit, all paddles have died, or a paddle has reflected at least 25 balls
+    while len(paddles) > 0:
+        dt = clock.tick(60)
 
-        #draw all paddles
+        # Check if there is a manual exit
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+                
 
+        rem = []
+        for x, p in enumerate(paddles):
+            n = nets[x]
+            g = ge[x]
+
+            inputs = (p.ball.x,         # Ball pos
+                        p.ball.y, 
+                        p.ball.vel[0],  # Ball Vel
+                        p.ball.vel[1], 
+                        p.y)            # Paddle pos (1D)
+            output = n.activate(inputs)
+
+            if output[0] > 0.5:
+                p.move_up(dt)
+            if output[1] > 0.5:
+                p.move_down(dt)
+
+            outcome = p.update(dt)
+            if outcome == 1:
+                # Ball was successfully reflected, reward genome
+                g.fitness += 1
+            
+            if outcome == -1:
+                # Paddle missed ball, remove it from the game
+                rem.append(x)
+
+        # Remove all the dropped paddles
+        for x in rem[::-1]:
+            ge.pop(x)
+            paddles.pop(x)
+            nets.pop(x)
+
+        # === DRAW ===
+        WIN.fill(c_black)
+
+
+        # Draw lines in the middle
+        num_lines = math.ceil(WIN_HEIGHT / 25 / 2)
+        for i in range(num_lines):
+            start_pos = (WIN_WIDTH / 2, 25 * 2 * i)
+            end_pos =   (WIN_WIDTH / 2, 25 * 2 * i + 25)
+            pygame.draw.line(WIN, c_white, start_pos, end_pos, 3)
+
+        for p in paddles:
+            p.draw(WIN)
+
+        pygame.display.flip()
+
+        
         
 
 
@@ -301,15 +254,7 @@ def run(config_path):
 
 
 if __name__ == '__main__':
-
-    #open config
-
-    #call run
-
-    pge = Pong_Game_Engine()
-    while not pge.should_quit:
-        pge.update()
-
+    run('./06_lab_final_project/config.txt')
 
 
 # TODO
