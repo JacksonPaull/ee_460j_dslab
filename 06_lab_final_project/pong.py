@@ -20,7 +20,8 @@ class Ball(GameObject):
     r = 10
     start_vel = 0.5
 
-    def __init__(self, x, y, paddle):
+    def __init__(self, x, y, paddle, col):
+        self.col = col
         self.x = x
         self.y = y
 
@@ -92,7 +93,7 @@ class Ball(GameObject):
         return True
 
     def draw(self, surf):
-        pygame.draw.circle(surf, c_white, (self.x, self.y), self.r)
+        pygame.draw.circle(surf, self.col, (self.x, self.y), self.r)
 
 
 
@@ -106,6 +107,7 @@ class Paddle(GameObject):
         'up':pygame.K_w,
         'down':pygame.K_s
     }
+    col = (random.randrange(125, 200), random.randrange(125, 200), random.randrange(125, 200))
 
     def __init__(self, x, y, engine, keybinds=None):
         self.x = x
@@ -116,7 +118,7 @@ class Paddle(GameObject):
         if keybinds is not None:
             self.keybinds = keybinds
 
-        self.ball = Ball(self.engine.scr_width/2, self.engine.scr_height/2, self)
+        self.ball = Ball(self.engine.scr_width/2, self.engine.scr_height/2, self, self.col)
 
     def reset(self):
         self.x = self.start_x
@@ -144,7 +146,7 @@ class Paddle(GameObject):
             self.y = self.engine.scr_height - self.height
 
     def draw(self, surf):
-        surf.fill(c_white, (self.x, self.y, self.width, self.height))
+        surf.fill(self.col, (self.x, self.y, self.width, self.height))
         self.ball.draw(surf)
 
 
@@ -254,13 +256,10 @@ class Pong_Game_Engine:
 
     def reset(self):
         self.paused = True
-
         self.screen.fill(c_black)
-
         for o in self.objects.values():
             o.reset()
             o.draw(self.screen)
-
         pygame.display.flip()
 
 
