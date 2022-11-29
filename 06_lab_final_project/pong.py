@@ -190,22 +190,29 @@ def eval_genomes(genomes, config):
             n = nets[x]
             g = ge[x]
 
-            inputs = (p.ball.x,         # Ball pos
+            inputs = (#p.ball.x,         # Ball pos
                         p.ball.y, 
-                        p.ball.vel[0],  # Ball Vel
-                        p.ball.vel[1], 
+                        #p.ball.vel[0],  # Ball Vel
+                        #p.ball.vel[1], 
                         p.y)            # Paddle pos (1D)
             output = n.activate(inputs)
 
-            if output[0] > 0.5:
+            if output[0] > 0.3:
                 p.move_up(dt)
-            if output[1] > 0.5:
+                ydelt = abs(p.y + p.height/2 - p.ball.y) / WIN_HEIGHT
+                if ydelt < 0.10:
+                    g.fitness += 1
+            if output[1] > 0.3:
                 p.move_down(dt)
+                ydelt = abs(p.y + p.height/2 - p.ball.y) / WIN_HEIGHT
+                if ydelt < 0.10:
+                    g.fitness += 1
 
             outcome = p.update(dt)
             if outcome == 1:
                 # Ball was successfully reflected, reward genome
-                g.fitness += 1
+                #g.fitness += 50
+                pass
             
             if outcome == -1:
                 # Paddle missed ball, remove it from the game
@@ -258,31 +265,4 @@ if __name__ == '__main__':
 
 
 # TODO
-    # Create run() function
-        # Wrapper function for eval_genomes, includes neat setup
-
-    # Create eval_genomes function
-        # parameters: genomes, config
-
-        # Create a paddle for each genome
-
-        # Create one ball for each genome
-            # Refactor ball to be a child class of the paddle
-
-        # One iteration of the game,
-            # score increases for every ball reflection
-            # 
-
-    # Ideas:
-        # Ball speed increases logarithmically throughout the game
-            # any other sublinear way?
-            # Linearly
-
-        # After model is trained play it vs all of us, see what scores we can get, how far the ai gets
-
-        # Inputs
-        # ball x
-        # ball y
-        # ball xspeed
-        # ball yspeed
-        # paddle y
+    # Add in current highest fintess within and out of generation
