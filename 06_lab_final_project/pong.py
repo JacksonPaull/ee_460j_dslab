@@ -22,7 +22,6 @@ pygame.display.set_caption('Pong with NEAT')
 # Global fonts
 FNT_DEBUG = pygame.font.SysFont('Arial', 32)
 
-gen = 0
 
 class Ball():
     r = 10
@@ -60,9 +59,8 @@ class Ball():
         self.y += self.vel[1] * dt
         self.x += self.vel[0] * dt
 
-        #Add a logarithmic speed boost to the ball
-        v = self.vel[0] ** 2 + self.vel[1] ** 2
-        v = math.sqrt(v)
+        v = math.sqrt(self.vel[0] ** 2 + self.vel[1] ** 2)
+
 
         angle = math.atan(self.vel[1]/ self.vel[0])
         if self.vel[0] < 0:
@@ -82,14 +80,13 @@ class Ball():
         if self.x >= self.paddle.x and self.x <= self.paddle.x + self.paddle.width and self.y >= self.paddle.y and self.y <= self.paddle.y + self.paddle.height:
             # Ball collided with paddle
             outcome = 1
-            self.v = math.log(math.exp(v)+1) #Add a logarithmic speed boost to the ball
+            v = math.log(math.exp(v) + 0.1) #Add a logarithmic speed boost to the ball
             ydelt = self.y - (self.paddle.y + self.paddle.height/2)
             angle = ydelt/self.paddle.height * math.pi / 2 #Value ranging from -pi/4 to pi/4 depending upon where the ball hit the paddle
             if self.vel[0] > 0:
                 angle = math.pi - angle
 
         # Bounce the ball off the left wall
-        # TODO Add in random angle shift here
         if self.x < 0:
             self.x *= -1
             angle  = math.pi - angle # flip the direction the ball is traveling over the y axis
@@ -97,7 +94,6 @@ class Ball():
 
         
         elif self.x > WIN_WIDTH:
-            # Paddle missed the ball #TODO return false
             outcome = -1
 
         self.vel = (v * math.cos(angle), v * math.sin(angle))
@@ -146,17 +142,25 @@ class Paddle():
         return self.ball.update(dt)   
         
     def move_up(self, dt):
+        if self.y == 0:
+            return False
         self.y -= min(self.speed*dt, self.y)
+        return True
 
     def move_down(self, dt):
+        if self.y + self.height == WIN_HEIGHT:
+            return False
         self.y += self.speed*dt
         if self.y + self.height > WIN_HEIGHT:
             self.y = WIN_HEIGHT - self.height
+        return True
 
     def draw(self, surf):
         surf.fill(self.col, (self.x, self.y, self.width, self.height))
         self.ball.draw(surf)
 
+def gaus(z):
+    return 1/math.sqrt(2*math.pi) * math.exp(-(z**2)/2)
 
 def eval_genomes(genomes, config):
     paddles = []
@@ -168,7 +172,7 @@ def eval_genomes(genomes, config):
         net = neat.nn.FeedForwardNetwork.create(genome, config)
         ge.append(genome)
         nets.append(net)
-        paddles.append(Paddle(WIN_WIDTH-30, WIN_HEIGHT/2))
+        paddles.append(Paddle(WIN_WIDTH-30, WIN_HEIGHT/2 - 67))
 
 
     # Create engine
@@ -190,23 +194,30 @@ def eval_genomes(genomes, config):
             n = nets[x]
             g = ge[x]
 
-            inputs = (#p.ball.x,         # Ball pos
+            inputs = (  p.ball.x,       # Ball pos
                         p.ball.y, 
-                        #p.ball.vel[0],  # Ball Vel
+                        #p.ball.vel[0], # Ball Vel
                         #p.ball.vel[1], 
                         p.y)            # Paddle pos (1D)
             output = n.activate(inputs)
 
-            if output[0] > 0.3:
-                p.move_up(dt)
-                ydelt = abs(p.y + p.height/2 - p.ball.y) / WIN_HEIGHT
-                if ydelt < 0.10:
-                    g.fitness += 1
-            if output[1] > 0.3:
-                p.move_down(dt)
-                ydelt = abs(p.y + p.height/2 - p.ball.y) / WIN_HEIGHT
-                if ydelt < 0.10:
-                    g.fitness += 1
+            if (output[0] > 0.5) ^ (output[1] > 0.5):
+                moved = False
+                if output[0] > 0.5:
+                    moved = p.move_up(dt)
+                if output[1] > 0.5:
+                    moved = p.move_down(dt)
+                
+                if moved:
+                    ydelt = abs(p.y + p.height/2 - p.ball.y) / p.height
+                    g.fitness += 5*gaus(ydelt)
+                else:
+                    g.fitness -= 1
+            else:
+                g.fitness -= 0.05
+            
+ 
+            
 
             outcome = p.update(dt)
             if outcome == 1:
